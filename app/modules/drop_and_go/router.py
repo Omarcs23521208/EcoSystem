@@ -1,4 +1,9 @@
-
+from app.modules.drop_and_go.observers import (
+    CollectionEventSubject,
+    ContainerCounterResetObserver,
+    PackageStatusCollectedObserver,
+    CitizenSectorAlertObserver,
+)
 from typing import List
 
 from fastapi import APIRouter, Depends, status
@@ -41,3 +46,51 @@ def get_citizen_requests(
 ):
     repo = DropAndGoRepository(db)
     return repo.get_by_citizen(citizen_id)
+
+
+@router.post("/containers/{container_code}/empty")
+def mark_container_emptied(
+    container_code: str,
+    db: Session = Depends(get_db),
+):
+    subject = CollectionEventSubject()
+    subject.attach(ContainerCounterResetObserver())
+    subject.attach(PackageStatusCollectedObserver())
+
+    event_payload = {
+        "event_type": "CONTAINER_EMPTIED",
+        "container_code": container_code,
+    }
+
+    subject.notify(db, event_payload)
+
+    return {
+        "status": "success",
+        "message": (
+            f"Contenedor {container_code} vaciado "
+            "y solicitudes actualizadas."
+        ),
+    }
+
+
+@router.post("/sectors/{zone_sector}/announce-arrival")
+def announce_truck_arrival(
+    zone_sector: str,
+    db: Session = Depends(get_db),
+):
+    subject = CollectionEventSubject()
+    subject.attach(CitizenSectorAlertObserver())
+
+    event_payload = {
+        "event_type": "TRUCK_ARRIVING_SECTOR",
+        "zone_sector": zone_sector,
+    }
+
+    subject.notify(db, event_payload)
+
+    return {
+        "status": "success",
+        "message": (
+            f"Alertas emitidas para vecinos del sector {zone_sector}."
+        ),
+    }
